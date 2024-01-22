@@ -32,29 +32,30 @@ class Track {
     }
     
     func track(event: String?,
+               eventID: TimedEventID?,
                properties: Properties? = nil,
                timedEvents: TimedEvents,
                superProperties: InternalProperties,
                mixpanelIdentity: MixpanelIdentity,
                epochInterval: Double) -> TimedEvents {
-        var ev = "mp_event"
-        if let event = event {
-            ev = event
+        var eventName = "mp_event"
+        if let event {
+            eventName = event
         } else {
             Logger.info(message: "mixpanel track called with empty event parameter. using 'mp_event'")
         }
-        if !(mixpanelInstance?.trackAutomaticEventsEnabled ?? false) && ev.hasPrefix("$ae_") {
+        if !(mixpanelInstance?.trackAutomaticEventsEnabled ?? false) && eventName.hasPrefix("$ae_") {
             return timedEvents
         }
-        let eventID = ev
+        let timedEventID = eventID ?? eventName
         assertPropertyTypes(properties)
         #if DEBUG
-        if !ev.hasPrefix("$") {
+        if !eventName.hasPrefix("$") {
             UserDefaults.standard.set(true, forKey: InternalKeys.mpDebugTrackedKey)
         }
         #endif
         let epochMilliseconds = round(epochInterval * 1000)
-        let eventStartTime = timedEvents[eventID]
+        let eventStartTime = timedEvents[timedEventID]
         var p = InternalProperties()
         AutomaticProperties.automaticPropertiesLock.read {
             p += AutomaticProperties.properties
@@ -63,7 +64,7 @@ class Track {
         p["time"] = epochMilliseconds
         var shadowTimedEvents = timedEvents
         if let eventStartTime = eventStartTime {
-            shadowTimedEvents.removeValue(forKey: eventID)
+            shadowTimedEvents.removeValue(forKey: timedEventID)
             p["$duration"] = Double(String(format: "%.3f", epochInterval - eventStartTime))
         }
         p["distinct_id"] = mixpanelIdentity.distinctID
@@ -82,7 +83,7 @@ class Track {
             p += properties
         }
 
-        var trackEvent: InternalProperties = ["event": ev, "properties": p]
+        var trackEvent: InternalProperties = ["event": eventName, "properties": p]
         metadata.toDict().forEach { (k, v) in trackEvent[k] = v }
         
         self.mixpanelPersistence.saveEntity(trackEvent, type: .events)
@@ -140,16 +141,16 @@ class Track {
         update(&superProperties)
     }
 
-    func time(event: String?, timedEvents: TimedEvents, startTime: Double) -> TimedEvents {
+    func time(eventID: TimedEventID, timedEvents: TimedEvents, startTime: TimeInterval) -> TimedEvents {
         if mixpanelInstance?.hasOptedOutTracking() ?? false {
             return timedEvents
         }
         var updatedTimedEvents = timedEvents
-        guard let event = event, !event.isEmpty else {
+        guard !eventID.isEmpty else {
             Logger.error(message: "mixpanel cannot time an empty event")
             return updatedTimedEvents
         }
-        updatedTimedEvents[event] = startTime
+        updatedTimedEvents[eventID] = startTime
         return updatedTimedEvents
     }
 
@@ -159,13 +160,13 @@ class Track {
         return updatedTimedEvents
     }
     
-    func clearTimedEvent(event: String?, timedEvents: TimedEvents) -> TimedEvents {
+    func clearTimedEvent(eventId: TimedEventID, timedEvents: TimedEvents) -> TimedEvents {
         var updatedTimedEvents = timedEvents
-        guard let event = event, !event.isEmpty else {
+        guard !eventId.isEmpty else {
             Logger.error(message: "mixpanel cannot clear an empty timed event")
             return updatedTimedEvents
         }
-        updatedTimedEvents.removeValue(forKey: event)
+        updatedTimedEvents.removeValue(forKey: eventId)
         return updatedTimedEvents
     }
 }
