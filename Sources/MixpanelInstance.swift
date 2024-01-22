@@ -37,6 +37,8 @@ public protocol MixpanelDelegate: AnyObject {
 
 public typealias Properties = [String: MixpanelType]
 typealias InternalProperties = [String: Any]
+typealias EventID = String
+typealias TimedEvents = [EventID: TimeInterval]
 typealias Queue = [InternalProperties]
 
 protocol AppLifecycle {
@@ -210,7 +212,7 @@ open class MixpanelInstance: CustomDebugStringConvertible, FlushDelegate, AEDele
     var networkQueue: DispatchQueue
     var optOutStatus: Bool?
     var useUniqueDistinctId: Bool
-    var timedEvents = InternalProperties()
+    var timedEvents = TimedEvents()
     
     let readWriteLock: ReadWriteLock
 #if os(iOS) && !targetEnvironment(macCatalyst)
@@ -819,7 +821,7 @@ extension MixpanelInstance {
             
             MixpanelPersistence.deleteMPUserDefaultsData(instanceName: self.name)
             self.readWriteLock.write {
-                self.timedEvents = InternalProperties()
+                self.timedEvents = TimedEvents()
                 self.anonymousId = self.defaultDeviceId()
                 self.distinctId = self.addPrefixToDeviceId(deviceId: self.anonymousId)
                 self.hadPersistedDistinctId = true
@@ -1027,7 +1029,7 @@ extension MixpanelInstance {
             guard let self = self else {
                 return
             }
-            var shadowTimedEvents = InternalProperties()
+            var shadowTimedEvents = TimedEvents()
             var shadowSuperProperties = InternalProperties()
             
             self.readWriteLock.read {
@@ -1187,12 +1189,12 @@ extension MixpanelInstance {
      - parameter event: the name of the event to be tracked that was passed to time(event:)
      */
     public func eventElapsedTime(event: String) -> Double {
-        var timedEvents = InternalProperties()
+        var timedEvents = TimedEvents()
         self.readWriteLock.read {
             timedEvents = self.timedEvents
         }
         
-        if let startTime = timedEvents[event] as? TimeInterval {
+        if let startTime = timedEvents[event] {
             return Date().timeIntervalSince1970 - startTime
         }
         return 0
@@ -1205,9 +1207,9 @@ extension MixpanelInstance {
         trackingQueue.async { [weak self] in
             guard let self = self else { return }
             self.readWriteLock.write {
-                self.timedEvents = InternalProperties()
+                self.timedEvents = TimedEvents()
             }
-            MixpanelPersistence.saveTimedEvents(timedEvents: InternalProperties(), instanceName: self.name)
+            MixpanelPersistence.saveTimedEvents(timedEvents: TimedEvents(), instanceName: self.name)
         }
     }
     
@@ -1473,7 +1475,7 @@ extension MixpanelInstance {
                 self.distinctId = self.addPrefixToDeviceId(deviceId: self.anonymousId)
                 self.hadPersistedDistinctId = true
                 self.superProperties = InternalProperties()
-                MixpanelPersistence.saveTimedEvents(timedEvents: InternalProperties(), instanceName: self.name)
+                MixpanelPersistence.saveTimedEvents(timedEvents: TimedEvents(), instanceName: self.name)
             }
             self.archive()
             self.readWriteLock.write {

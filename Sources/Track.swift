@@ -33,10 +33,10 @@ class Track {
     
     func track(event: String?,
                properties: Properties? = nil,
-               timedEvents: InternalProperties,
+               timedEvents: TimedEvents,
                superProperties: InternalProperties,
                mixpanelIdentity: MixpanelIdentity,
-               epochInterval: Double) -> InternalProperties {
+               epochInterval: Double) -> TimedEvents {
         var ev = "mp_event"
         if let event = event {
             ev = event
@@ -46,6 +46,7 @@ class Track {
         if !(mixpanelInstance?.trackAutomaticEventsEnabled ?? false) && ev.hasPrefix("$ae_") {
             return timedEvents
         }
+        let eventID = ev
         assertPropertyTypes(properties)
         #if DEBUG
         if !ev.hasPrefix("$") {
@@ -53,7 +54,7 @@ class Track {
         }
         #endif
         let epochMilliseconds = round(epochInterval * 1000)
-        let eventStartTime = timedEvents[ev] as? Double
+        let eventStartTime = timedEvents[eventID]
         var p = InternalProperties()
         AutomaticProperties.automaticPropertiesLock.read {
             p += AutomaticProperties.properties
@@ -62,7 +63,7 @@ class Track {
         p["time"] = epochMilliseconds
         var shadowTimedEvents = timedEvents
         if let eventStartTime = eventStartTime {
-            shadowTimedEvents.removeValue(forKey: ev)
+            shadowTimedEvents.removeValue(forKey: eventID)
             p["$duration"] = Double(String(format: "%.3f", epochInterval - eventStartTime))
         }
         p["distinct_id"] = mixpanelIdentity.distinctID
@@ -139,7 +140,7 @@ class Track {
         update(&superProperties)
     }
 
-    func time(event: String?, timedEvents: InternalProperties, startTime: Double) -> InternalProperties {
+    func time(event: String?, timedEvents: TimedEvents, startTime: Double) -> TimedEvents {
         if mixpanelInstance?.hasOptedOutTracking() ?? false {
             return timedEvents
         }
@@ -152,13 +153,13 @@ class Track {
         return updatedTimedEvents
     }
 
-    func clearTimedEvents(_ timedEvents: InternalProperties) -> InternalProperties {
+    func clearTimedEvents(_ timedEvents: TimedEvents) -> TimedEvents {
         var updatedTimedEvents = timedEvents
         updatedTimedEvents.removeAll()
         return updatedTimedEvents
     }
     
-    func clearTimedEvent(event: String?, timedEvents: InternalProperties) -> InternalProperties {
+    func clearTimedEvent(event: String?, timedEvents: TimedEvents) -> TimedEvents {
         var updatedTimedEvents = timedEvents
         guard let event = event, !event.isEmpty else {
             Logger.error(message: "mixpanel cannot clear an empty timed event")
